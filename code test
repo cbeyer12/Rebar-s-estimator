@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Estimating Application</title>
+    <!-- Chosen Palette: Calm Harmony -->
+    <!-- Application Structure Plan: A guided, multi-step single-page application that mirrors the manual's logical workflow. The structure is designed to prevent errors and ensure all necessary data is captured before calculations are performed.
+    1.  **Project Setup:** Captures high-level administrative data, corresponding to the "Estimate Prep" phase. This is the mandatory first step.
+    2.  **General Specifications:** Gathers project-wide default values from the "General Notes" section of plans (e.g., cover, lap lengths). This centralizes parameters that affect multiple calculations, improving consistency.
+    3.  **Component Take-off:** The core interactive module where users add and define structural components (Footing Pads, Piers, etc.) one by one. This task-oriented view allows the estimator to focus on a single element at a time, following the manual's "lowest elevation up" methodology.
+    4.  **Estimate Summary:** A real-time dashboard that aggregates all entered data into an itemized take-off report and a visual chart. This provides immediate feedback and a comprehensive overview for review.
+    This sequential structure was chosen because the manual outlines a very specific, non-skippable order of operations. By enforcing this flow, the application minimizes the risk of omission and ensures that foundational data (like general cover specs) is available for subsequent component calculations, directly translating the manual's best practices into a user-friendly digital workflow. -->
+    <!-- Visualization & Content Choices:
+    - **Report Info:** Project administrative details. -> **Goal:** Inform/Collect. -> **Viz/Presentation:** Standard HTML input forms. -> **Interaction:** User text entry. -> **Justification:** Most direct way to capture required administrative data. -> **Library/Method:** HTML/Tailwind.
+    - **Report Info:** General Notes (cover, lap length, bar type). -> **Goal:** Configure. -> **Viz/Presentation:** Input fields with clear labels and defaults. -> **Interaction:** User selects/enters project-wide parameters. -> **Justification:** Establishes a baseline for all subsequent calculations, enforcing consistency as per the manual. -> **Library/Method:** HTML/Tailwind.
+    - **Report Info:** Individual structural components (Footing Pads, Piers, etc.). -> **Goal:** Organize & Calculate. -> **Viz/Presentation:** A dynamic list of "component cards". Each card is created from a dedicated input form. -> **Interaction:** User clicks "Add" buttons, fills out a form for a specific component, and saves. The system instantly calculates quantities and adds a summary card to the list. Business rules (e.g., deriving height from elevations) are handled with conditional form fields. -> **Justification:** This modular approach allows estimators to build the estimate piece by piece, mirroring the manual's process of addressing one element at a time. Instant calculation provides immediate feedback. -> **Library/Method:** HTML/Tailwind/JS.
+    - **Report Info:** Aggregated rebar quantities. -> **Goal:** Compare & Summarize. -> **Viz/Presentation:** An itemized HTML table for detailed review and a Bar Chart visualizing total rebar weight by bar size. -> **Interaction:** The table and chart update in real-time as components are added/edited/removed. -> **Justification:** The table provides the necessary granular detail for ordering materials, while the chart offers a high-level visual summary for quick analysis and reporting. -> **Library/Method:** HTML/Tailwind, Chart.js (Canvas). -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background-color: #F8F7F4; /* Warm Neutral Background */
+            color: #4A4A4A;
+            font-family: 'Inter', sans-serif;
+        }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        .btn-primary {
+            background-color: #4A5568; /* Slate */
+            color: #FFFFFF;
+            transition: background-color 0.3s;
+        }
+        .btn-primary:hover {
+            background-color: #2D3748;
+        }
+        .btn-secondary {
+            background-color: #E2E8F0;
+            color: #4A5568;
+            transition: background-color 0.3s;
+        }
+        .btn-secondary:hover {
+            background-color: #CBD5E0;
+        }
+        .card {
+            background-color: #FFFFFF;
+            border: 1px solid #E2E8F0;
+        }
+        .input-field {
+            background-color: #F7FAFC;
+            border: 1px solid #E2E8F0;
+            color: #2D3748;
+        }
+        .input-field:focus {
+            outline: none;
+            border-color: #4A5568;
+            box-shadow: 0 0 0 2px rgba(74, 85, 104, 0.2);
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 350px;
+            max-height: 400px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 400px;
+            }
+        }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div id="app" class="container mx-auto p-4 md:p-8 max-w-7xl">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-800">Automated Rebar Estimator</h1>
+            <p class="text-gray-500 mt-2">Translate manual take-off procedures into fast, accurate estimates.</p>
+        </header>
+
+        <!-- Navigation / Progress Bar -->
+        <nav class="w-full max-w-2xl mx-auto mb-10">
+            <div class="flex items-center justify-between">
+                <div id="nav-step-1" class="step-active flex flex-col items-center text-center w-1/4">
+                    <div class="w-8 h-8 rounded-full bg-slate-700 text-white flex items-center justify-center font-bold">1</div>
+                    <p class="mt-2 text-xs md:text-sm font-semibold text-slate-700">Project Setup</p>
+                </div>
+                <div class="flex-1 h-1 bg-gray-300"></div>
+                <div id="nav-step-2" class="step-inactive flex flex-col items-center text-center w-1/4">
+                    <div class="w-8 h-8 rounded-full bg-gray-300 text-gray-500 flex items-center justify-center font-bold">2</div>
+                    <p class="mt-2 text-xs md:text-sm font-medium text-gray-500">General Specs</p>
+                </div>
+                 <div class="flex-1 h-1 bg-gray-300"></div>
+                <div id="nav-step-3" class="step-inactive flex flex-col items-center text-center w-1/4">
+                    <div class="w-8 h-8 rounded-full bg-gray-300 text-gray-500 flex items-center justify-center font-bold">3</div>
+                    <p class="mt-2 text-xs md:text-sm font-medium text-gray-500">Take-off</p>
+                </div>
+                 <div class="flex-1 h-1 bg-gray-300"></div>
+                <div id="nav-step-4" class="step-inactive flex flex-col items-center text-center w-1/4">
+                    <div class="w-8 h-8 rounded-full bg-gray-300 text-gray-500 flex items-center justify-center font-bold">4</div>
+                    <p class="mt-2 text-xs md:text-sm font-medium text-gray-500">Summary</p>
+                </div>
+            </div>
+        </nav>
+
+
+        <main>
+            <!-- View 1: Project Setup -->
+            <section id="view-project-setup" class="">
+                <div class="card p-6 md:p-8 rounded-lg shadow-md max-w-3xl mx-auto">
+                    <h2 class="text-2xl font-bold mb-1 text-gray-700">Project & Document Information</h2>
+                    <p class="text-gray-500 mb-6">Start by entering the high-level details for this estimate, as you would during the "Estimate Prep" phase.</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label for="projectName" class="block text-sm font-medium text-gray-600 mb-1">Project Name</label>
+                            <input type="text" id="projectName" class="w-full p-2 rounded-md input-field" value="Office Building Renovation">
+                        </div>
+                        <div>
+                            <label for="customerInfo" class="block text-sm font-medium text-gray-600 mb-1">Customer Info</label>
+                            <input type="text" id="customerInfo" class="w-full p-2 rounded-md input-field" value="ABC Developers">
+                        </div>
+                         <div>
+                            <label for="estimateNumber" class="block text-sm font-medium text-gray-600 mb-1">Estimate #</label>
+                            <input type="text" id="estimateNumber" class="w-full p-2 rounded-md input-field" value="EST-2025-001">
+                        </div>
+                        <div>
+                            <label for="scopeOfWork" class="block text-sm font-medium text-gray-600 mb-1">Scope of Work</label>
+                            <input type="text" id="scopeOfWork" class="w-full p-2 rounded-md input-field" value="Rebar for FDN & Slab">
+                        </div>
+                         <div>
+                            <label for="drawingDate" class="block text-sm font-medium text-gray-600 mb-1">Date of Plans</label>
+                            <input type="date" id="drawingDate" class="w-full p-2 rounded-md input-field" value="2025-06-27">
+                        </div>
+                        <div>
+                            <label for="drawingRevision" class="block text-sm font-medium text-gray-600 mb-1">Drawing Revision #</label>
+                            <input type="text" id="drawingRevision" class="w-full p-2 rounded-md input-field" value="B">
+                        </div>
+                    </div>
+                    <div class="mt-8 text-right">
+                         <button id="btn-goto-specs" class="btn-primary font-bold py-2 px-6 rounded-lg">Next: General Specs &rarr;</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- View 2: General Specifications -->
+            <section id="view-general-specs" class="hidden">
+                 <div class="card p-6 md:p-8 rounded-lg shadow-md max-w-3xl mx-auto">
+                    <h2 class="text-2xl font-bold mb-1 text-gray-700">General Specifications & Defaults</h2>
+                    <p class="text-gray-500 mb-6">Enter the project-wide default values found in the General Notes section of the drawings. These will be used for calculations unless overridden on a specific component.</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div>
+                            <label for="spec-concrete-strength" class="block text-sm font-medium text-gray-600 mb-1">Concrete Strength (PSI)</label>
+                            <input type="number" id="spec-concrete-strength" class="w-full p-2 rounded-md input-field" value="4000">
+                        </div>
+                        <div>
+                            <label for="spec-bar-type" class="block text-sm font-medium text-gray-600 mb-1">Bar Type</label>
+                            <select id="spec-bar-type" class="w-full p-2 rounded-md input-field">
+                                <option>Black</option>
+                                <option selected>Epoxy</option>
+                                <option>Galvanized</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="spec-bar-grade" class="block text-sm font-medium text-gray-600 mb-1">Bar Grade</label>
+                             <select id="spec-bar-grade" class="w-full p-2 rounded-md input-field">
+                                <option>40</option>
+                                <option selected>60</option>
+                                <option>75</option>
+                             </select>
+                        </div>
+                        <div>
+                            <label for="spec-lap-length" class="block text-sm font-medium text-gray-600 mb-1">Default Lap Length (in)</label>
+                            <input type="number" step="0.1" id="spec-lap-length" class="w-full p-2 rounded-md input-field" value="30">
+                        </div>
+                         <div class="md:col-span-2 lg:col-span-3 mt-4 mb-2 border-t pt-4">
+                            <h3 class="text-lg font-semibold text-gray-700">Default Cover (U.N.O.)</h3>
+                         </div>
+                        <div>
+                            <label for="spec-cover-footing-bottom" class="block text-sm font-medium text-gray-600 mb-1">Footing Bottom (in)</label>
+                            <input type="number" step="0.1" id="spec-cover-footing-bottom" class="w-full p-2 rounded-md input-field" value="3">
+                        </div>
+                        <div>
+                            <label for="spec-cover-footing-sides" class="block text-sm font-medium text-gray-600 mb-1">Footing Sides (in)</label>
+                            <input type="number" step="0.1" id="spec-cover-footing-sides" class="w-full p-2 rounded-md input-field" value="3">
+                        </div>
+                        <div>
+                            <label for="spec-cover-top" class="block text-sm font-medium text-gray-600 mb-1">Element Top (in)</label>
+                            <input type="number" step="0.1" id="spec-cover-top" class="w-full p-2 rounded-md input-field" value="2">
+                        </div>
+                         <div>
+                            <label for="spec-cover-ties" class="block text-sm font-medium text-gray-600 mb-1">Tie Sides (in)</label>
+                            <input type="number" step="0.1" id="spec-cover-ties" class="w-full p-2 rounded-md input-field" value="2">
+                        </div>
+                    </div>
+                     <div class="mt-8 flex justify-between">
+                        <button id="btn-back-to-setup" class="btn-secondary font-bold py-2 px-6 rounded-lg">&larr; Back to Setup</button>
+                        <button id="btn-goto-takeoff" class="btn-primary font-bold py-2 px-6 rounded-lg">Start Take-off &rarr;</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- View 3 & 4: Take-off and Summary -->
+            <section id="view-takeoff-summary" class="hidden">
+                 <div class="flex justify-center mb-6 border-b border-gray-300">
+                    <button id="tab-takeoff" class="tab-btn-active py-3 px-6 text-lg font-semibold border-b-2 border-slate-700 text-slate-700">Take-off</button>
+                    <button id="tab-summary" class="tab-btn-inactive py-3 px-6 text-lg font-semibold text-gray-500">Summary</button>
+                </div>
+                
+                <!-- Take-off Content -->
+                <div id="content-takeoff">
+                    <div class="text-center mb-6">
+                        <h2 class="text-2xl font-bold text-gray-700">Component Take-off</h2>
+                        <p class="text-gray-500">Add structural components following the manual's progression: start with the lowest elevation and work your way up.</p>
+                    </div>
+                    <div class="flex justify-center gap-4 mb-8 flex-wrap">
+                        <button class="btn-primary py-2 px-4 rounded-lg font-semibold" onclick="showComponentForm('footingPad')">+ Add Footing Pad</button>
+                        <button class="btn-primary py-2 px-4 rounded-lg font-semibold" onclick="showComponentForm('pier')">+ Add Pier</button>
+                        <button class="btn-primary py-2 px-4 rounded-lg font-semibold" onclick="showComponentForm('continuousFooting')">+ Add Continuous Footing</button>
+                    </div>
+                    
+                    <!-- Component Form Modal -->
+                    <div id="component-form-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                        <div class="bg-white rounded-lg shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                            <div class="p-6 border-b">
+                                <h3 id="component-form-title" class="text-xl font-bold text-gray-800">Add Component</h3>
+                            </div>
+                            <div id="component-forms-container" class="p-6">
+                                <!-- Footing Pad Form -->
+                                <form id="form-footingPad" class="hidden space-y-4">
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-sm font-medium">Location/ID (e.g., A/4)</label>
+                                            <input type="text" name="location" class="w-full p-2 rounded-md input-field" required>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium">Quantity of Pads</label>
+                                            <input type="number" name="quantity" class="w-full p-2 rounded-md input-field" value="1" min="1" required>
+                                        </div>
+                                    </div>
+                                    <div class="grid grid-cols-3 gap-4">
+                                        <div>
+                                            <label class="block text-sm font-medium">Length (in)</label>
+                                            <input type="number" name="length" class="w-full p-2 rounded-md input-field" required>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium">Width (in)</label>
+                                            <input type="number" name="width" class="w-full p-2 rounded-md input-field" required>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium">Depth (in)</label>
+                                            <input type="number" name="depth" class="w-full p-2 rounded-md input-field" required>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium">Straight Bar Reinf. (e.g., 6-#5 EW)</label>
+                                        <input type="text" name="reinf" placeholder="Count-#Size Direction" class="w-full p-2 rounded-md input-field" required>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium">Dowel Reinf. (e.g., 4-#6)</label>
+                                        <input type="text" name="dowels" placeholder="Count-#Size (optional)" class="w-full p-2 rounded-md input-field">
+                                    </div>
+                                    <div class="mt-4">
+                                        <label for="footingPadDescription" class="block text-sm font-medium text-gray-600 mb-1">Generated Description</label>
+                                        <textarea id="footingPadDescription" class="w-full p-2 rounded-md input-field h-24" readonly></textarea>
+                                    </div>
+                                </form>
+
+                                <!-- Pier Form -->
+                                <form id="form-pier" class="hidden space-y-4">
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-sm font-medium">Location/ID (e.g., A/4)</label>
+                                            <input type="text" name="location" class="w-full p-2 rounded-md input-field" required>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium">Quantity of Piers</label>
+                                            <input type="number" name="quantity" class="w-full p-2 rounded-md input-field" value="1" min="1" required>
+                                        </div>
+                                    </div>
+                                    <div class="grid grid-cols-3 gap-4">
+                                         <div>
+                                            <label class="block text-sm font-medium">Length (in)</label>
+                                            <input type="number" name="length" class="w-full p-2 rounded-md input-field" required>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium">Width (in)</label>
+                                            <input type="number" name="width" class="w-full p-2 rounded-md input-field" required>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium">Height (in)</label>
+                                            <input type="number" name="height" class="w-full p-2 rounded-md input-field" required>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium">Vertical Bars (e.g., 4-#6)</label>
+                                        <input type="text" name="verticals" placeholder="Count-#Size" class="w-full p-2 rounded-md input-field" required>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium">Ties (e.g., #3 @ 12)</label>
+                                        <input type="text" name="ties" placeholder="#Size @ Spacing" class="w-full p-2 rounded-md input-field" required>
+                                    </div>
+                                    <div class="mt-4">
+                                        <label for="pierDescription" class="block text-sm font-medium text-gray-600 mb-1">Generated Description</label>
+                                        <textarea id="pierDescription" class="w-full p-2 rounded-md input-field h-24" readonly></textarea>
+                                    </div>
+                                </form>
+                                
+                                <!-- Continuous Footing Form -->
+                                <form id="form-continuousFooting" class="hidden space-y-4">
+                                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-sm font-medium">Location/ID (e.g., Grid A)</label>
+                                            <input type="text" name="location" class="w-full p-2 rounded-md input-field" required>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium">Quantity of Runs</label>
+                                            <input type="number" name="quantity" class="w-full p-2 rounded-md input-field" value="1" min="1" required>
+                                        </div>
+                                    </div>
+                                    <div class="grid grid-cols-3 gap-4">
+                                         <div>
+                                            <label class="block text-sm font-medium">Length (in)</label>
+                                            <input type="number" name="length" class="w-full p-2 rounded-md input-field" required>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium">Width (in)</label>
+                                            <input type="number" name="width" class="w-full p-2 rounded-md input-field" required>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium">Height (in)</label>
+                                            <input type="number" name="height" class="w-full p-2 rounded-md input-field" required>
+                                        </div>
+                                    </div>
+                                     <div>
+                                        <label class="block text-sm font-medium">Longitudinal Bars (e.g., 3-#5 Top, 3-#5 Bot)</label>
+                                        <input type="text" name="longitudinal" placeholder="e.g., 3-#5 T&B" class="w-full p-2 rounded-md input-field" required>
+                                    </div>
+                                     <div>
+                                        <label class="block text-sm font-medium">Transverse Bars (e.g., #4 @ 12)</label>
+                                        <input type="text" name="transverse" placeholder="#Size @ Spacing" class="w-full p-2 rounded-md input-field" required>
+                                    </div>
+                                    <div class="mt-4">
+                                        <label for="continuousFootingDescription" class="block text-sm font-medium text-gray-600 mb-1">Generated Description</label>
+                                        <textarea id="continuousFootingDescription" class="w-full p-2 rounded-md input-field h-24" readonly></textarea>
+                                    </div>
+                                </form>
+                            </div>
+                            <div class="p-4 bg-gray-50 border-t flex justify-end gap-4">
+                                <button type="button" class="btn-secondary py-2 px-4 rounded-lg" onclick="hideComponentForm()">Cancel</button>
+                                <button type="button" class="btn-secondary py-2 px-4 rounded-lg" id="generateDescriptionBtn">✨ Generate Description</button>
+                                <button type="button" class="btn-primary py-2 px-4 rounded-lg" onclick="saveComponent()">Save Component</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Components List -->
+                    <div id="components-list" class="space-y-4">
+                        <div id="no-components-placeholder" class="text-center py-12 border-2 border-dashed border-gray-300 rounded-lg">
+                            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                <path vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                            </svg>
+                            <h3 class="mt-2 text-sm font-medium text-gray-900">No components added yet</h3>
+                            <p class="mt-1 text-sm text-gray-500">Get started by adding a footing, pier, or other component.</p>
+                        </div>
+                    </div>
+
+                </div>
+                
+                <!-- Summary Content -->
+                <div id="content-summary" class="hidden">
+                     <div class="text-center mb-6">
+                        <h2 class="text-2xl font-bold text-gray-700">Estimate Summary</h2>
+                        <p class="text-gray-500">A real-time overview of your complete rebar take-off.</p>
+                    </div>
+                    
+                    <div class="card p-6 md:p-8 rounded-lg shadow-md mb-8">
+                         <h3 class="text-xl font-bold mb-4 text-gray-700">Total Rebar Weight by Size</h3>
+                         <div class="chart-container">
+                             <canvas id="summaryChart"></canvas>
+                         </div>
+                    </div>
+
+                    <div class="card p-6 md:p-8 rounded-lg shadow-md mb-8">
+                         <h3 class="text-xl font-bold mb-4 text-gray-700">Estimate Summary Report</h3>
+                         <button id="generateSummaryBtn" class="btn-primary py-2 px-4 rounded-lg font-semibold mb-4">✨ Generate Project Summary</button>
+                         <p id="summary-report-text" class="text-gray-700 leading-relaxed"></p>
+                         <p id="summary-loading-indicator" class="text-blue-500 hidden">Generating summary...</p>
+                         <p id="summary-error-message" class="text-red-500 hidden">Error generating summary. Please try again.</p>
+                    </div>
+
+
+                    <div class="card p-6 md:p-8 rounded-lg shadow-md">
+                         <h3 class="text-xl font-bold mb-4 text-gray-700">Itemized Quantity Take-Off</h3>
+                         <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Component</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Details</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rebar Type</th>
+                                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total LF</th>
+                                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total LBS</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="summary-table-body" class="bg-white divide-y divide-gray-200">
+                                    <tr id="no-summary-placeholder-template">
+                                        <td colspan="5" class="px-6 py-12 text-center text-gray-500">No components have been added to the estimate.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                         </div>
+                    </div>
+
+                </div>
+
+                 <div class="mt-12 text-center">
+                    <button id="btn-back-to-specs-from-takeoff" class="btn-secondary font-bold py-2 px-6 rounded-lg">&larr; Back to General Specs</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+
+    const appState = {
+        currentView: 'view-project-setup',
+        projectInfo: {},
+        generalSpecs: {},
+        components: [],
+        activeForm: null,
+    };
+
+    const REBAR_DATA = {
+        '3': { weightPerFoot: 0.376, hook90: 6, stirrupHook: 4 },
+        '4': { weightPerFoot: 0.668, hook90: 8, stirrupHook: 4.5 },
+        '5': { weightPerFoot: 1.043, hook90: 10, stirrupHook: 5.5 },
+        '6': { weightPerFoot: 1.502, hook90: 12, stirrupHook: 6.5 },
+        '7': { weightPerFoot: 2.044, hook90: 14, stirrupHook: 7.5 },
+        '8': { weightPerFoot: 2.670, hook90: 16, stirrupHook: 8.5 },
+    };
+
+    const views = {
+        setup: document.getElementById('view-project-setup'),
+        specs: document.getElementById('view-general-specs'),
+        takeoff: document.getElementById('view-takeoff-summary'),
+    };
+    
+    const navSteps = {
+        1: document.getElementById('nav-step-1'),
+        2: document.getElementById('nav-step-2'),
+        3: document.getElementById('nav-step-3'),
+        4: document.getElementById('nav-step-4'),
+    }
+
+    const tabs = {
+        takeoff: document.getElementById('tab-takeoff'),
+        summary: document.getElementById('tab-summary'),
+    }
+
+    const content = {
+        takeoff: document.getElementById('content-takeoff'),
+        summary: document.getElementById('content-summary'),
+    }
+    
+    let summaryChart = null;
+
+    // Store placeholder HTML strings
+    const noComponentsPlaceholderHtml = `
+        <div id="no-components-placeholder" class="text-center py-12 border-2 border-dashed border-gray-300 rounded-lg">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+            </svg>
+            <h3 class="mt-2 text-sm font-medium text-gray-900">No components added yet</h3>
+            <p class="mt-1 text-sm text-gray-500">Get started by adding a footing, pier, or other component.</p>
+        </div>`;
+
+    const noSummaryPlaceholderHtml = `
+        <tr id="no-summary-placeholder">
+            <td colspan="5" class="px-6 py-12 text-center text-gray-500">No components have been added to the estimate.</td>
+        </tr>`;
+
+
+    function navigateTo(viewName) {
+        Object.values(views).forEach(v => v.classList.add('hidden'));
+        views[viewName].classList.remove('hidden');
+        appState.currentView = `view-${viewName}`;
+        updateNav(viewName);
+    }
+    
+    function updateNav(viewName) {
+        Object.values(navSteps).forEach(step => {
+             step.children[0].classList.remove('bg-slate-700', 'text-white');
+             step.children[0].classList.add('bg-gray-300', 'text-gray-500');
+             step.children[1].classList.remove('text-slate-700', 'font-semibold');
+             step.children[1].classList.add('text-gray-500', 'font-medium');
+        });
+        
+        const setActive = (stepNum) => {
+            navSteps[stepNum].children[0].classList.add('bg-slate-700', 'text-white');
+            navSteps[stepNum].children[0].classList.remove('bg-gray-300', 'text-gray-500');
+            navSteps[stepNum].children[1].classList.add('text-slate-700', 'font-semibold');
+            navSteps[stepNum].children[1].classList.remove('text-gray-500', 'font-medium');
+        };
+        
+        switch(viewName) {
+            case 'setup': setActive(1); break;
+            case 'specs': setActive(1); setActive(2); break;
+            case 'takeoff': setActive(1); setActive(2); setActive(3); setActive(4); break;
+        }
+    }
+
+    function switchTab(tabName) {
+        Object.values(tabs).forEach(t => {
+            t.classList.remove('tab-btn-active', 'border-slate-700', 'text-slate-700');
+            t.classList.add('tab-btn-inactive', 'text-gray-500');
+        });
+        Object.values(content).forEach(c => c.classList.add('hidden'));
+
+        tabs[tabName].classList.add('tab-btn-active', 'border-slate-700', 'text-slate-700');
+        tabs[tabName].classList.remove('tab-btn-inactive', 'text-gray-500');
+        content[tabName].classList.remove('hidden');
+        
+        if (tabName === 'summary') {
+            renderSummary();
+        }
+    }
+    
+    window.showComponentForm = (formType) => {
+        appState.activeForm = formType;
+        document.getElementById('component-form-title').innerText = `Add ${formType.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}`;
+        
+        document.querySelectorAll('#component-forms-container form').forEach(f => f.classList.add('hidden'));
+        document.getElementById(`form-${formType}`).classList.remove('hidden');
+        document.getElementById(`form-${formType}`).reset();
+        document.getElementById(`${formType}Description`).value = ''; // Clear previous description
+        
+        document.getElementById('component-form-modal').classList.remove('hidden');
+    }
+
+    window.hideComponentForm = () => {
+        document.getElementById('component-form-modal').classList.add('hidden');
+        appState.activeForm = null;
+    }
+    
+    function parseReinf(reinfString) {
+        const parts = reinfString.replace(/ /g, '').match(/(\d+)-#(\d+)/);
+        if (!parts) return null;
+        return { count: parseInt(parts[1]), size: parts[2] };
+    }
+
+    function parseTies(tieString) {
+        const parts = tieString.replace(/ /g, '').match(/#(\d+)@(\d+)/);
+        if (!parts) return null;
+        return { size: parts[1], spacing: parseInt(parts[2]) };
+    }
+
+    function parseLongitudinal(longString) {
+        const cleaned = longString.toLowerCase().replace(/\s/g, '');
+        const match = cleaned.match(/(\d+)-#(\d+)/);
+        if (!match) return null;
+        let count = parseInt(match[1]);
+        const size = match[2];
+        if (cleaned.includes('t&b') || cleaned.includes('topandbottom') || cleaned.includes('eachface')) {
+            count *= 2;
+        }
+        return { count, size };
+    }
+
+
+    function calculateComponent(component) {
+        const specs = appState.generalSpecs;
+        component.calculated = { rebar: [] };
+        let totalQty = component.quantity;
+
+        switch (component.type) {
+            case 'footingPad': {
+                const reinf = parseReinf(component.data.reinf);
+                if (reinf) {
+                    const barLength = (component.data.length - 2 * specs.coverFootingSides) / 12; // in feet
+                    const totalLF = reinf.count * barLength * 2 * totalQty; // x2 for Each Way
+                    const totalLBS = totalLF * (REBAR_DATA[reinf.size]?.weightPerFoot || 0);
+                    component.calculated.rebar.push({
+                        description: `${reinf.count}-#${reinf.size} EW Straight Bars`,
+                        size: reinf.size,
+                        totalLF: totalLF,
+                        totalLBS: totalLBS,
+                    });
+                }
+                const dowels = parseReinf(component.data.dowels);
+                if (dowels) {
+                    const hook = (REBAR_DATA[dowels.size]?.hook90 || 0);
+                    const embedment = component.data.depth - specs.coverFootingBottom;
+                    const lap = specs.lapLength;
+                    const dowelLength = (hook + embedment + lap) / 12; // in feet
+                    const totalLF = dowels.count * dowelLength * totalQty;
+                    const totalLBS = totalLF * (REBAR_DATA[dowels.size]?.weightPerFoot || 0);
+                     component.calculated.rebar.push({
+                        description: `${dowels.count}-#${dowels.size} Dowels`,
+                        size: dowels.size,
+                        totalLF: totalLF,
+                        totalLBS: totalLBS,
+                    });
+                }
+                break;
+            }
+            case 'pier': {
+                 const verticals = parseReinf(component.data.verticals);
+                 if (verticals) {
+                     const barLength = (component.data.height - specs.coverTop) / 12;
+                     const totalLF = verticals.count * barLength * totalQty;
+                     const totalLBS = totalLF * (REBAR_DATA[verticals.size]?.weightPerFoot || 0);
+                     component.calculated.rebar.push({
+                        description: `${verticals.count}-#${verticals.size} Verticals`,
+                        size: verticals.size,
+                        totalLF: totalLF,
+                        totalLBS: totalLBS,
+                    });
+                 }
+                 const ties = parseTies(component.data.ties);
+                 if (ties) {
+                     const tieSide1 = component.data.length - 2 * specs.coverTies;
+                     const tieSide2 = component.data.width - 2 * specs.coverTies;
+                     const hooks = 2 * (REBAR_DATA[ties.size]?.stirrupHook || 0);
+                     const tieLength = (2 * tieSide1 + 2 * tieSide2 + hooks) / 12;
+                     const tieCount = Math.ceil(component.data.height / ties.spacing) + 1;
+                     const totalLF = tieCount * tieLength * totalQty;
+                     const totalLBS = totalLF * (REBAR_DATA[ties.size]?.weightPerFoot || 0);
+                     component.calculated.rebar.push({
+                        description: `${tieCount}x #${ties.size} Ties @ ${ties.spacing}"`,
+                        size: ties.size,
+                        totalLF: totalLF,
+                        totalLBS: totalLBS,
+                    });
+                 }
+                 break;
+            }
+            case 'continuousFooting': {
+                const longitudinal = parseLongitudinal(component.data.longitudinal);
+                if (longitudinal) {
+                    const barLength = component.data.length / 12;
+                    const totalLF = longitudinal.count * barLength * totalQty;
+                    const totalLBS = totalLF * (REBAR_DATA[longitudinal.size]?.weightPerFoot || 0);
+                    component.calculated.rebar.push({
+                        description: `${longitudinal.count}-#${longitudinal.size} Longitudinal`,
+                        size: longitudinal.size,
+                        totalLF: totalLF,
+                        totalLBS: totalLBS,
+                    });
+                }
+                const transverse = parseTies(component.data.transverse);
+                if (transverse) {
+                    const barLength = (component.data.width - 2 * specs.coverFootingSides) / 12;
+                    const barCount = Math.floor(component.data.length / transverse.spacing) + 1;
+                    const totalLF = barCount * barLength * totalQty;
+                    const totalLBS = totalLF * (REBAR_DATA[transverse.size]?.weightPerFoot || 0);
+                    component.calculated.rebar.push({
+                        description: `${barCount}x #${transverse.size} Transverse @ ${transverse.spacing}"`,
+                        size: transverse.size,
+                        totalLF: totalLF,
+                        totalLBS: totalLBS,
+                    });
+                }
+                break;
+            }
+        }
+    }
+
+
+    window.saveComponent = () => {
+        const formId = `form-${appState.activeForm}`;
+        const form = document.getElementById(formId);
+        if (!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
+        
+        const formData = new FormData(form);
+        const data = {};
+        for (let [key, value] of formData.entries()) {
+            const numValue = parseFloat(value);
+            data[key] = !isNaN(numValue) && value.trim() !== '' ? numValue : value;
+        }
+
+        const component = {
+            id: Date.now(),
+            type: appState.activeForm,
+            location: data.location,
+            quantity: data.quantity,
+            data: data,
+            description: document.getElementById(`${appState.activeForm}Description`).value // Save generated description
+        };
+
+        calculateComponent(component);
+        appState.components.push(component);
+        
+        renderComponentsList();
+        hideComponentForm();
+    };
+    
+    window.deleteComponent = (id) => {
+        appState.components = appState.components.filter(c => c.id !== id);
+        renderComponentsList();
+        renderSummary();
+    }
+
+    function renderComponentsList() {
+        const listContainer = document.getElementById('components-list');
+        listContainer.innerHTML = ''; 
+
+        if (appState.components.length === 0) {
+            listContainer.innerHTML = noComponentsPlaceholderHtml;
+            return;
+        }
+
+        appState.components.forEach(c => {
+            let detailsHtml = '';
+            switch(c.type) {
+                case 'footingPad': detailsHtml = `Dims: ${c.data.length}"x${c.data.width}"x${c.data.depth}" &nbsp;&bull;&nbsp; Reinf: ${c.data.reinf}`; break;
+                case 'pier': detailsHtml = `Dims: ${c.data.length}"x${c.data.width}"x${c.data.height}" &nbsp;&bull;&nbsp; Verts: ${c.data.verticals}`; break;
+                case 'continuousFooting': detailsHtml = `Dims: ${c.data.length}"x${c.data.width}"x${c.data.height}" &nbsp;&bull;&nbsp; Long: ${c.data.longitudinal}`; break;
+            }
+
+            const totalLbs = c.calculated.rebar.reduce((sum, item) => sum + item.totalLBS, 0);
+
+            const card = `
+                <div class="card p-4 rounded-lg shadow-sm flex items-center justify-between">
+                    <div class="flex-grow">
+                        <div class="flex items-center gap-4">
+                            <span class="font-bold text-slate-700 text-lg">${c.type.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}</span>
+                             <span class="text-sm text-white bg-slate-500 rounded-full px-3 py-0.5">${c.quantity}x</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mt-1"><strong>Location:</strong> ${c.location}</p>
+                        <p class="text-sm text-gray-500">${detailsHtml}</p>
+                        ${c.description ? `<p class="text-xs text-gray-500 italic mt-2">${c.description}</p>` : ''}
+                    </div>
+                    <div class="text-right ml-4">
+                        <p class="font-bold text-xl text-slate-800">${totalLbs.toFixed(2)} lbs</p>
+                        <button class="text-red-500 hover:text-red-700 text-sm mt-1" onclick="deleteComponent(${c.id})">Delete</button>
+                    </div>
+                </div>`;
+            listContainer.innerHTML += card;
+        });
+    }
+
+    function renderSummary() {
+        const tableBody = document.getElementById('summary-table-body');
+        const summaryData = {};
+        
+        tableBody.innerHTML = ''; // Clear existing content
+
+        if (appState.components.length === 0) {
+            tableBody.innerHTML = noSummaryPlaceholderHtml;
+            updateSummaryChart({});
+            document.getElementById('summary-report-text').innerText = '';
+            document.getElementById('summary-loading-indicator').classList.add('hidden');
+            document.getElementById('summary-error-message').classList.add('hidden');
+            return;
+        }
+
+        appState.components.forEach(c => {
+             c.calculated.rebar.forEach(r => {
+                 const row = `
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm font-medium text-gray-900">${c.type.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())} (${c.location})</div>
+                            <div class="text-sm text-gray-500">Qty: ${c.quantity}</div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-800">${r.description}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">#${r.size} ${appState.generalSpecs.barType}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-800">${r.totalLF.toFixed(2)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold text-slate-900">${r.totalLBS.toFixed(2)}</td>
+                    </tr>
+                 `;
+                 tableBody.innerHTML += row;
+
+                 if (!summaryData[r.size]) {
+                     summaryData[r.size] = { totalLBS: 0 };
+                 }
+                 summaryData[r.size].totalLBS += r.totalLBS;
+             });
+        });
+        
+        updateSummaryChart(summaryData);
+    }
+    
+    function updateSummaryChart(data) {
+        const ctx = document.getElementById('summaryChart').getContext('2d');
+        const sortedSizes = Object.keys(data).sort((a,b) => parseInt(a) - parseInt(b));
+        
+        const chartData = {
+            labels: sortedSizes.map(size => `#${size} Bar`),
+            datasets: [{
+                label: 'Total Weight (LBS)',
+                data: sortedSizes.map(size => data[size].totalLBS.toFixed(2)),
+                backgroundColor: 'rgba(74, 85, 104, 0.8)',
+                borderColor: 'rgba(45, 55, 72, 1)',
+                borderWidth: 1,
+                borderRadius: 4,
+            }]
+        };
+
+        if(summaryChart) {
+            summaryChart.destroy();
+        }
+
+        summaryChart = new Chart(ctx, {
+            type: 'bar',
+            data: chartData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Weight (LBS)' }
+                    },
+                    x: {
+                        title: { display: true, text: 'Rebar Size' }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                         callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                if (context.parsed.y !== null) {
+                                    label += context.parsed.y + ' lbs';
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    async function callGeminiAPI(prompt) {
+        let chatHistory = [];
+        chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+        const payload = { contents: chatHistory };
+        const apiKey = "";
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+        try {
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+            if (result.candidates && result.candidates.length > 0 &&
+                result.candidates[0].content && result.candidates[0].content.parts &&
+                result.candidates[0].content.parts.length > 0) {
+                return result.candidates[0].content.parts[0].text;
+            } else {
+                console.error('Unexpected API response structure:', result);
+                return 'Error: Could not generate description. Unexpected API response.';
+            }
+        } catch (error) {
+            console.error('Error calling Gemini API:', error);
+            return 'Error: Failed to connect to AI service.';
+        }
+    }
+
+    document.getElementById('generateDescriptionBtn').addEventListener('click', async () => {
+        const form = document.getElementById(`form-${appState.activeForm}`);
+        const currentDescriptionField = document.getElementById(`${appState.activeForm}Description`);
+        
+        if (!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
+
+        const formData = new FormData(form);
+        const data = {};
+        for (let [key, value] of formData.entries()) {
+            data[key] = value;
+        }
+
+        let prompt = `Generate a concise, professional, and grammatically correct description for a construction estimating report.
+        Component Type: ${appState.activeForm.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+        Location/ID: ${data.location}
+        Quantity: ${data.quantity} units`;
+
+        switch(appState.activeForm) {
+            case 'footingPad':
+                prompt += `\nDimensions: Length ${data.length} inches, Width ${data.width} inches, Depth ${data.depth} inches.`;
+                prompt += `\nStraight Bar Reinforcement: ${data.reinf}.`;
+                if (data.dowels) prompt += `\nDowel Reinforcement: ${data.dowels}.`;
+                prompt += `\nFocus on the component's purpose and its reinforcement details, suitable for a take-off summary.`;
+                break;
+            case 'pier':
+                prompt += `\nDimensions: Length ${data.length} inches, Width ${data.width} inches, Height ${data.height} inches.`;
+                prompt += `\nVertical Bars: ${data.verticals}.`;
+                prompt += `\nTies: ${data.ties}.`;
+                prompt += `\nFocus on the component's purpose and its reinforcement details, suitable for a take-off summary.`;
+                break;
+            case 'continuousFooting':
+                prompt += `\nDimensions: Length ${data.length} inches, Width ${data.width} inches, Height ${data.height} inches.`;
+                prompt += `\nLongitudinal Bars: ${data.longitudinal}.`;
+                if (data.transverse) prompt += `\nTransverse Bars: ${data.transverse}.`;
+                prompt += `\nFocus on the component's purpose and its reinforcement details, suitable for a take-off summary.`;
+                break;
+        }
+        
+        currentDescriptionField.value = 'Generating description...';
+        const generatedText = await callGeminiAPI(prompt);
+        currentDescriptionField.value = generatedText;
+    });
+
+    document.getElementById('generateSummaryBtn').addEventListener('click', async () => {
+        const summaryReportText = document.getElementById('summary-report-text');
+        const loadingIndicator = document.getElementById('summary-loading-indicator');
+        const errorMessage = document.getElementById('summary-error-message');
+
+        summaryReportText.innerText = '';
+        loadingIndicator.classList.remove('hidden');
+        errorMessage.classList.add('hidden');
+
+        if (appState.components.length === 0) {
+            summaryReportText.innerText = 'No components added to generate a summary.';
+            loadingIndicator.classList.add('hidden');
+            return;
+        }
+
+        let prompt = `Generate a concise project estimate summary report based on the following details.
+        Project Name: ${appState.projectInfo.projectName}
+        Customer: ${appState.projectInfo.customerInfo}
+        Estimate #: ${appState.projectInfo.estimateNumber}
+        Scope of Work: ${appState.projectInfo.scopeOfWork}
+        Plans Dated: ${appState.projectInfo.drawingDate} Rev: ${appState.projectInfo.drawingRevision}
+
+        General Specifications:
+        Concrete Strength: ${appState.generalSpecs.concreteStrength} PSI
+        Bar Type: ${appState.generalSpecs.barType}
+        Bar Grade: ${appState.generalSpecs.barGrade}
+        Default Lap Length: ${appState.generalSpecs.lapLength} inches
+        Default Cover: Bottom ${appState.generalSpecs.coverFootingBottom}in, Sides ${appState.generalSpecs.coverFootingSides}in, Top ${appState.generalSpecs.coverTop}in, Ties ${appState.generalSpecs.coverTies}in.
+
+        Component Breakdown:
+        `;
+
+        const totalRebarByComponent = {};
+        const totalRebarByBarSize = {};
+
+        appState.components.forEach(c => {
+            const componentType = c.type.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+            const totalLbs = c.calculated.rebar.reduce((sum, item) => sum + item.totalLBS, 0);
+
+            if (!totalRebarByComponent[componentType]) {
+                totalRebarByComponent[componentType] = 0;
+            }
+            totalRebarByComponent[componentType] += totalLbs;
+
+            prompt += `\n- ${c.quantity}x ${componentType} at ${c.location}: Total ~${totalLbs.toFixed(2)} lbs.`;
+            if (c.description) {
+                prompt += ` "${c.description}"`;
+            }
+            c.calculated.rebar.forEach(r => {
+                if (!totalRebarByBarSize[r.size]) {
+                    totalRebarByBarSize[r.size] = 0;
+                }
+                totalRebarByBarSize[r.size] += r.totalLBS;
+            });
+        });
+
+        prompt += `\n\nOverall Rebar Quantities (approximate):`;
+        for (const size in totalRebarByBarSize) {
+            prompt += `\n- #${size} Rebar: ${totalRebarByBarSize[size].toFixed(2)} lbs`;
+        }
+        
+        prompt += `\n\nSummarize the project, main rebar types used, total quantities, and a brief concluding remark about the estimate.`;
+        prompt += ` Ensure the output is only the summary text, without any conversational or introductory phrases.`;
+        prompt += ` Format it professionally, as if for a client or project manager.`;
+
+
+        const generatedSummary = await callGeminiAPI(prompt);
+        
+        loadingIndicator.classList.add('hidden');
+        if (generatedSummary.startsWith('Error:')) {
+            errorMessage.innerText = generatedSummary;
+            errorMessage.classList.remove('hidden');
+        } else {
+            summaryReportText.innerText = generatedSummary;
+        }
+    });
+
+
+    document.getElementById('btn-goto-specs').addEventListener('click', () => {
+        appState.projectInfo = {
+            projectName: document.getElementById('projectName').value,
+            customerInfo: document.getElementById('customerInfo').value,
+            estimateNumber: document.getElementById('estimateNumber').value,
+            scopeOfWork: document.getElementById('scopeOfWork').value,
+            drawingDate: document.getElementById('drawingDate').value,
+            drawingRevision: document.getElementById('drawingRevision').value,
+        };
+        navigateTo('specs');
+    });
+
+    document.getElementById('btn-back-to-setup').addEventListener('click', () => navigateTo('setup'));
+    
+    document.getElementById('btn-goto-takeoff').addEventListener('click', () => {
+        appState.generalSpecs = {
+            concreteStrength: parseFloat(document.getElementById('spec-concrete-strength').value),
+            barType: document.getElementById('spec-bar-type').value,
+            barGrade: document.getElementById('spec-bar-grade').value,
+            lapLength: parseFloat(document.getElementById('spec-lap-length').value),
+            coverFootingBottom: parseFloat(document.getElementById('spec-cover-footing-bottom').value),
+            coverFootingSides: parseFloat(document.getElementById('spec-cover-footing-sides').value),
+            coverTop: parseFloat(document.getElementById('spec-cover-top').value),
+            coverTies: parseFloat(document.getElementById('spec-cover-ties').value),
+        };
+        navigateTo('takeoff');
+        switchTab('takeoff');
+    });
+
+    document.getElementById('btn-back-to-specs-from-takeoff').addEventListener('click', () => navigateTo('specs'));
+    
+    tabs.takeoff.addEventListener('click', () => switchTab('takeoff'));
+    tabs.summary.addEventListener('click', () => switchTab('summary'));
+
+});
+</script>
+</body>
+</html>
